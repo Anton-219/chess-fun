@@ -1,0 +1,29 @@
+{
+    "colors": {
+        "black_field": [
+            155,
+            43,
+            40
+        ],
+        "white_field": [
+            255,
+            240,
+            240
+        ],
+        "black_pieces": [
+            0,
+            0,
+            0
+        ],
+        "white_pieces": [
+            0,
+            0,
+            0
+        ],
+		"highlighted": [
+            255,
+            170,
+            65
+        ]
+    }
+}
