@@ -5,7 +5,7 @@ Created on Thu Nov 24 20:26:50 2022
 @author: anton
 """
 
-from typing import Dict, List, Tuple, TypeVar
+from typing import Dict, List, Tuple, TypeVar, Union
 import copy
 
 from misc import chess_to_coord, coord_to_chess, ls2chess
@@ -63,6 +63,16 @@ MOVES['wP'] = {(c, r): [valid([(c, r+1)])*(r < 7), [(c, r+2)]*(r == 1)]
 # moves of black pawn
 MOVES['bP'] = {(c, r): [valid([(c, r-1)])*(r > 0), [(c, r-2)]*(r == 6)]
                for c, r in positions}
+
+# Flatten the movesets of the pawns.
+for pos in MOVES['wP']: 
+    lss = MOVES['wP'][pos]
+    MOVES['wP'][pos] = [l for ls in lss for l in ls]
+
+for pos in MOVES['bP']: 
+    lss = MOVES['bP'][pos]
+    MOVES['bP'][pos] = [l for ls in lss for l in ls]
+    
 # moves of white pawn take
 MOVES['wPtake'] = {(c, r): valid([(c+1, r+1), (c-1, r+1)]*(r > 0))
                    for r, c in positions}
@@ -142,29 +152,6 @@ class Piece:
         self.team = None
         self.position = None
 
-    def available_moves(self, pieces):
-        moves = set()
-        # Check each direction
-        for ms in self.move_set[self.position]:
-            midx = len(ms)
-            pot_enemy = None
-            sms = set(ms)
-            for pos in pieces:
-                piece = pieces[pos]
-                if piece == self:
-                    continue
-                if pos in sms:
-                    idx = ms.index(pos)
-                    if idx < midx:
-                        midx = idx
-                        # if piece.team != self.team:
-                        #     pot_enemy = piece
-                        # else:
-                        #     pot_enemy = None
-            # if pot_enemy is not None:
-            #     midx += 1
-            moves.update(ms[:midx+1])
-
     def danger_zone(self, pieces, calc_move = False):
         """Returns the positions to which this piece can move, that is, all positions that are threatened.
         A dictionary of pieces must be given and a set of positions is returned.
@@ -174,7 +161,9 @@ class Piece:
         protect anything.
 
         Args:
-            pieces (Dict[Position, Piece]): _description_
+            pieces (Dict[Position, Piece]): A dictionary mapping positions to pieces.
+            calc_move (bool): Determines if a move should be calculated instead of the danger zone (excludes the pieces of the own team.). Defaults to False
+            
 
         Returns:
             Set[Position]: The part of the board reached by the influence of the current piece. 
@@ -183,81 +172,38 @@ class Piece:
         # Check each direction
         for ms in self.move_set[self.position]:
             if len(ms) == 0:
-                continue
-            # iidx = len(ms)
-            # sms = set(ms)
-            # for pos in pieces:
-            #     piece = pieces[pos]
-            #     if piece == self:
-            #         continue
-            #     # Check if the position is a move and if the current piece is an enemy king. 
-            #     # If the piece is an enemy king the danger zone goes beyond it as the king should not move in this direction. 
-            #     # If the moves should be calculated than the king should not be ignored.
-            #     if pos in sms and not (isinstance(piece, King) and piece.team != self.team):
-            #         idx = ms.index(pos)
-            #         if idx < iidx:
-            #             iidx = idx
-            # I think this code should be faster.
+                continue # TODO Remove the empty lists from the move set.
             iidx = 0
             for i, m in enumerate(ms): 
                 iidx = i
                 piece = pieces.get(m)
                 if piece is not None:
                     if calc_move:
-                        break
-                    if not (isinstance(piece, King) and piece.team != self.team):
+                        if piece.team == self.team: 
+                            iidx -= 1
+                        # break # Break here to prevent King Shenanigans
+                    elif isinstance(piece, King) and piece.team != self.team:
                         # Ignore the enemy king when calculating the damage zone. 
                         continue 
-                    
-                # if not (piece is None or (isinstance(piece, King) and piece.team != self.team)): 
-                #     break
+                    break
             influence_zone.update(ms[:iidx+1])
         return influence_zone
     
-    def get_moves(self, pieces):
-        return {pos for pos in self.danger_zone(pieces) if pieces.get(pos) is None or pieces[pos].team != self.team}
-    
-    # def get_legal_moves(self, pieces):
-    #     """Returns all legal moves available for this piece based on the pieces which are given. 
-    #     The pieces should be given as a dictionary where the positions are the keys and the pieces the values.
-    #     Note that this collection is not proof checked. 
-    #     A tuple of two lists is returned. 
-    #     The first part is a list of all available legal moves.
-    #     The second is a list of enemy pieces which the current piece is available to take. 
+    def get_moves(self, pieces, **kwargs):
+        """Calculate all the moves the piece can make. 
+        
+        The kwargs is here to ensure compatibility with overwritten methods.
 
-    #     Args:
-    #         pieces (Dict[Position, Piece]): The dictionary of available pieces on the board.
+        Args:
+            pieces (Dict[Position, Piece]): A dictionary mapping positions to pieces.
 
-    #     Returns:
-    #          Tuple[List[Position], List[Piece]]: Two lists: a list of available moves and a list of enemy pieces.
-    #     """
-    #     legal_moves = []
-    #     enemies = []
-    #     # Check each direction
-    #     for ms in self.move_set[self.position]:
-    #         midx = len(ms)
-    #         pot_enemy = None
-    #         sms = set(ms)
-    #         # TODO Schau mal ob es andersherum geht: for m in ms statt das da unten.
-    #         for pos in pieces:
-    #             piece = pieces[pos]
-    #             if piece == self:
-    #                 continue
-    #             if pos in sms:
-    #                 idx = ms.index(pos)
-    #                 if idx < midx:
-    #                     midx = idx
-    #                     if piece.team != self.team:
-    #                         pot_enemy = piece
-    #                     else:
-    #                         pot_enemy = None
-    #         legal_moves.append(ms[:midx])
-    #         if pot_enemy is not None:
-    #             enemies.append(pot_enemy)
-    #     return legal_moves, enemies
+        Returns:
+            Set[Position]: A set of positions the piece can move to.
+        """
+        return self.danger_zone(pieces, calc_move=True)
     
     def clegal_moves(self, pieces):
-        lmoves, enemies = self.get_legal_moves(pieces)
+        lmoves, enemies = self.get_moves(pieces)
         return ls2chess(lm for lm in lmoves), enemies
     
     def sdanger_zone(self, pieces):
@@ -270,7 +216,7 @@ class Piece:
 
 class King(Piece):
     # TODO Castle.
-    def __init__(self, team: str, position: Tuple[int, int] = None) -> None:
+    def __init__(self, team: Union[str, Team], position: Tuple[int, int] = None) -> None:
         if position is None:
             if self.team == 'w':
                 position = (0, 4)
@@ -284,8 +230,34 @@ class King(Piece):
 
         self.icon_text = '\u2654' if team == 'w' else '\u265A'
 
-    # def move_set(self, position):
-    #     pass
+    def check_pins(self, pieces):
+        pinned = []
+        # Check each direction
+        for k in direction:
+            tpiece = None
+            iidx = 0
+            ms = direction[k][self.position]
+            possible_pin = False
+            for i, m in enumerate(ms):
+                iidx = i
+                piece = pieces.get(m)
+                if piece is not None:
+                    if piece.team == self.team: 
+                        if tpiece is not None: 
+                            # The piece is on the own team and another friendly piece is found before an enemy 
+                            # piece could be found. This means that from this side no pins are possible.
+                            tpiece = None
+                            break 
+                        else:
+                            tpiece = piece 
+                    else: 
+                        possible_pin = True
+                        break
+            if tpiece is not None and possible_pin:
+                pinned.append((tpiece, set(ms[:iidx+1])))
+        return pinned
+            
+            
 
 class Queen(Piece):
     def __init__(self, team: str, position: Tuple[int, int]) -> None:
@@ -341,13 +313,19 @@ class Pawn(Piece):
         dzone = set(MOVES[f"{self.team}{self.id}take"][self.position])
         return dzone
     
-    def get_moves(self, pieces):
+    def get_moves(self, pieces, en_passant, **kwargs):
         dzone = self.danger_zone(pieces)
-        for ms in self.move_set[self.position]:
-            for m in ms: 
-                piece = pieces.get(m)
-                if piece is None: 
-                    dzone.add(m)
-        return dzone
+        mset = set()
+        for m in dzone: 
+            piece = pieces.get(m) 
+            if piece is not None and piece.team != self.team or en_passant == m: 
+                mset.add(m)
+        for m in self.move_set[self.position]:
+            if m not in pieces: 
+                mset.add(m)
+            else:
+                # The pawn cannot move behind a piece which is right before it.
+                break
+        return mset
             
 
