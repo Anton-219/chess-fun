@@ -20,10 +20,15 @@
             0,
             0
         ],
-		"highlighted": [
+		"white_highlighted": [
             255,
             170,
             65
-        ]
+        ],
+		"black_highlighted" : [
+			49, 
+			33, 
+			12
+		]
     }
 }
